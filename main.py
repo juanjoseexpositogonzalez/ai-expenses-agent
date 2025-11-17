@@ -1,4 +1,11 @@
 """Main entry point for the application."""
+import os
+
+# Force CPU usage for docling before any imports
+# This must be set before docling is imported anywhere
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["ACCELERATOR"] = "cpu"
+
 import logging
 from app.telegram.bot import create_bot
 

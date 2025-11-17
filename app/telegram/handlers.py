@@ -6,8 +6,15 @@ from app.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
 
-# Initialize document service
-document_service = DocumentService()
+# Initialize document service lazily to avoid initialization errors at import time
+_document_service = None
+
+def get_document_service() -> DocumentService:
+    """Get or create document service instance."""
+    global _document_service
+    if _document_service is None:
+        _document_service = DocumentService()
+    return _document_service
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -35,6 +42,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     try:
         # Process text
+        document_service = get_document_service()
         processed = await document_service.process_text(text)
         
         await update.message.reply_text(
@@ -64,6 +72,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         status_msg = await update.message.reply_text("📥 Descargando imagen...")
         
         # Process photo
+        document_service = get_document_service()
         processed = await document_service.process_photo(photo, context.bot)
         
         await status_msg.edit_text("📄 Procesando imagen...")
@@ -117,6 +126,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         status_msg = await update.message.reply_text("📥 Descargando PDF...")
         
         # Process PDF
+        document_service = get_document_service()
         processed = await document_service.process_document(document, context.bot)
         
         await status_msg.edit_text("📄 Procesando PDF con docling...")

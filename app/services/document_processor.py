@@ -1,10 +1,14 @@
 """Service for processing PDF documents using docling."""
 import logging
+import os
 from pathlib import Path
-from typing import Optional
+
+# Force CPU usage before importing docling to avoid CUDA issues
+# Hide CUDA devices to force CPU usage
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["ACCELERATOR"] = "cpu"
+
 from docling.document_converter import DocumentConverter
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
 from app.services.models import ProcessedDocument
 
 logger = logging.getLogger(__name__)
@@ -15,16 +19,9 @@ class DocumentProcessor:
     
     def __init__(self):
         """Initialize document processor with docling converter."""
-        # Configure docling pipeline options
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = True  # Enable OCR for scanned PDFs
-        pipeline_options.do_table_structure = True  # Extract table structures
-        
-        # Initialize converter
-        self.converter = DocumentConverter(
-            format=InputFormat.PDF,
-            pipeline_options=pipeline_options
-        )
+        # Initialize converter - docling handles PDFs by default
+        # CPU mode is enforced at module level via ACCELERATOR env var
+        self.converter = DocumentConverter()
     
     def process_pdf(self, file_path: Path) -> ProcessedDocument:
         """
