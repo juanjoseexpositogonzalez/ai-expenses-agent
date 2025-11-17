@@ -15,6 +15,7 @@ dependencies = [
     "python-telegram-bot>=22.5",
     "sqlmodel>=0.0.27",
     "python-decouple>=3.8",
+    "pydantic>=2.0.0",
 ]
 
 [dependency-groups]
