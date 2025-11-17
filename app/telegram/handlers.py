@@ -3,11 +3,14 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 from app.services.document_service import DocumentService
+from app.services.ai.factory import create_ai_provider
+from app.core.expense_processor import ExpenseProcessor
 
 logger = logging.getLogger(__name__)
 
-# Initialize document service lazily to avoid initialization errors at import time
+# Initialize services lazily to avoid initialization errors at import time
 _document_service = None
+_expense_processor = None
 
 def get_document_service() -> DocumentService:
     """Get or create document service instance."""
@@ -15,6 +18,14 @@ def get_document_service() -> DocumentService:
     if _document_service is None:
         _document_service = DocumentService()
     return _document_service
+
+def get_expense_processor() -> ExpenseProcessor:
+    """Get or create expense processor instance."""
+    global _expense_processor
+    if _expense_processor is None:
+        ai_provider = create_ai_provider()
+        _expense_processor = ExpenseProcessor(ai_provider)
+    return _expense_processor
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -45,18 +56,30 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         document_service = get_document_service()
         processed = await document_service.process_text(text)
         
-        await update.message.reply_text(
+        status_msg = await update.message.reply_text(
             f"✅ Texto recibido:\n\n{text}\n\n"
-            "📝 Procesando gasto con IA..."
+            "🤖 Analizando con IA..."
         )
         
-        # TODO: Send to AI for analysis
-        logger.info(f"Processed text: {len(processed.text_content or '')} characters")
+        # Process expense with AI and save to database
+        expense_processor = get_expense_processor()
+        expense = await expense_processor.process_expense(text=processed.text_content)
+        
+        await status_msg.edit_text(
+            f"✅ Gasto guardado:\n\n"
+            f"💰 {expense.amount} {expense.currency}\n"
+            f"📅 {expense.date.strftime('%Y-%m-%d')}\n"
+            f"📝 {expense.description}\n"
+            f"🏷️ {expense.category.name}\n"
+            f"{f'💱 {expense.converted_amount:.2f} {expense.base_currency}' if expense.converted_amount != expense.amount else ''}"
+        )
+        
+        logger.info(f"Expense saved: ID {expense.id}")
         
     except Exception as e:
-        logger.error(f"Error processing text: {e}")
+        logger.error(f"Error processing text: {e}", exc_info=True)
         await update.message.reply_text(
-            "❌ Error al procesar el texto. Por favor, inténtalo de nuevo."
+            f"❌ Error al procesar el gasto: {str(e)}\n\nPor favor, inténtalo de nuevo."
         )
 
 
@@ -77,18 +100,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         await status_msg.edit_text("📄 Procesando imagen...")
         
+        await status_msg.edit_text("🤖 Analizando con IA...")
+        
+        # Process expense with AI and save to database
+        expense_processor = get_expense_processor()
+        expense = await expense_processor.process_expense(image=processed.image_bytes)
+        
         await status_msg.edit_text(
-            f"✅ Imagen procesada:\n"
-            f"• Tamaño: {processed.metadata.get('width')}x{processed.metadata.get('height')}\n"
-            f"• Formato: {processed.metadata.get('format')}\n\n"
-            "🤖 Analizando con IA..."
+            f"✅ Gasto guardado:\n\n"
+            f"💰 {expense.amount} {expense.currency}\n"
+            f"📅 {expense.date.strftime('%Y-%m-%d')}\n"
+            f"📝 {expense.description}\n"
+            f"🏷️ {expense.category.name}\n"
+            f"{f'💱 {expense.converted_amount:.2f} {expense.base_currency}' if expense.converted_amount != expense.amount else ''}"
         )
         
-        # TODO: Send to AI for analysis
-        logger.info(
-            f"Processed image: {processed.metadata.get('file_name')}, "
-            f"{len(processed.image_bytes or b'')} bytes"
-        )
+        logger.info(f"Expense saved from image: ID {expense.id}")
         
     except ValueError as e:
         logger.warning(f"Validation error processing photo: {e}")
@@ -131,19 +158,22 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         await status_msg.edit_text("📄 Procesando PDF con docling...")
         
-        text_length = len(processed.text_content or "")
+        await status_msg.edit_text("🤖 Analizando con IA...")
+        
+        # Process expense with AI and save to database
+        expense_processor = get_expense_processor()
+        expense = await expense_processor.process_expense(pdf_text=processed.text_content)
+        
         await status_msg.edit_text(
-            f"✅ PDF procesado:\n"
-            f"• Nombre: {processed.metadata.get('file_name')}\n"
-            f"• Texto extraído: {text_length} caracteres\n\n"
-            "🤖 Analizando con IA..."
+            f"✅ Gasto guardado:\n\n"
+            f"💰 {expense.amount} {expense.currency}\n"
+            f"📅 {expense.date.strftime('%Y-%m-%d')}\n"
+            f"📝 {expense.description}\n"
+            f"🏷️ {expense.category.name}\n"
+            f"{f'💱 {expense.converted_amount:.2f} {expense.base_currency}' if expense.converted_amount != expense.amount else ''}"
         )
         
-        # TODO: Send to AI for analysis
-        logger.info(
-            f"Processed PDF: {processed.metadata.get('file_name')}, "
-            f"{text_length} characters extracted"
-        )
+        logger.info(f"Expense saved from PDF: ID {expense.id}")
         
     except ValueError as e:
         logger.warning(f"Validation error processing PDF: {e}")
